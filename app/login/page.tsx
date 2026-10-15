@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, type FormEvent } from "react";
@@ -21,17 +20,29 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
+
     setError("");
+    setBusy(true);
 
-    if (login(email, password)) {
-      router.push("/");
-      return;
+    try {
+      const success = await login(email, password);
+
+      if (success) {
+        router.replace("/");
+        return;
+      }
+
+      setError("Incorrect email or password.");
+    } catch {
+      setError("Unable to log in. Please try again.");
+    } finally {
+      setBusy(false);
     }
-
-    setError("Incorrect email or password.");
   }
 
   return (
@@ -73,8 +84,8 @@ export default function LoginPage() {
               </p>
             )}
 
-            <Button type="submit" className="w-full">
-              Log in
+            <Button type="submit" disabled={busy} className="w-full">
+              {busy ? "Logging in..." : "Log in"}
             </Button>
           </form>
 
@@ -86,9 +97,14 @@ export default function LoginPage() {
             <p>Password: Admin123!</p>
           </div>
 
-          <Link href="/" className="mt-6 inline-block underline">
-            Back to shop
-          </Link>
+          <div className="mt-6 flex flex-wrap gap-4">
+            <Link href="/register" className="underline">
+              Create account
+            </Link>
+            <Link href="/" className="underline">
+              Back to shop
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </main>
