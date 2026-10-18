@@ -49,6 +49,7 @@ export default function ProductList() {
   const [maxPrice, setMaxPrice] = useState("");
   const [minRating, setMinRating] = useState("0");
   const [sortBy, setSortBy] = useState("default");
+  const [visibleCount,setVisibleCount]=useState(20);
   const [selectedProduct, setSelectedProduct] =
     useState<Product | null>(null);
   const [compareIds, setCompareIds] = useState<number[]>([]);
@@ -353,7 +354,7 @@ export default function ProductList() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {sorted.map((product) => (
+        {sorted.slice(0, visibleCount).map((product) => (
           <article
             key={product.id}
             className="rounded border p-5"
@@ -420,7 +421,20 @@ export default function ProductList() {
           </article>
         ))}
       </div>
+<p className="mt-4" role="status">
+  Showing {Math.min(visibleCount, sorted.length)} of{" "}
+  {sorted.length} products
+</p>
 
+{visibleCount < sorted.length && (
+  <button
+    type="button"
+    onClick={() => setVisibleCount((count) => count + 20)}
+    className="mt-4 rounded border px-4 py-2"
+  >
+    Load More
+  </button>
+)}
       {filtered.length === 0 && (
         <p className="mt-4" role="status">
           No products found.
