@@ -18,6 +18,9 @@ export default function AccountBar() {
 
       {user ? (
         <div className="flex flex-wrap items-center gap-4">
+          <Link href="/wishlist" className="underline">
+  Wishlist
+</Link>
           <Link href="/checkout" className="underline">
             Checkout
           </Link>
