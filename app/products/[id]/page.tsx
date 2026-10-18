@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useCartStore } from "../../stores/cartStore";
+import { useWishlistStore } from "../../stores/wishlistStore";
 
 type Product = {
   id: number;
@@ -28,6 +29,11 @@ function ProductDetailsContent() {
   const items = useCartStore((state) => state.items);
   const addItem = useCartStore((state) => state.addItem);
 
+  const wishlistItems = useWishlistStore((state) => state.items);
+  const toggleWishlist = useWishlistStore(
+    (state) => state.toggleItem
+  );
+
   const {
     data: product,
     isPending,
@@ -37,8 +43,7 @@ function ProductDetailsContent() {
     queryKey: ["product", id],
     queryFn: async () => {
       const response = await fetch(
-        "https://dummyjson.com/products/" +
-          encodeURIComponent(id)
+        "https://dummyjson.com/products/" + encodeURIComponent(id)
       );
 
       if (!response.ok) {
@@ -89,6 +94,10 @@ function ProductDetailsContent() {
 
   const available = Math.max(0, product.stock - inCart);
 
+  const isWishlisted = wishlistItems.some(
+    (item) => item.id === product.id
+  );
+
   function handleAddToCart() {
     if (!product) return;
 
@@ -97,9 +106,7 @@ function ProductDetailsContent() {
       quantity < 1 ||
       quantity > available
     ) {
-      setMessage(
-        "Choose a quantity within the available stock."
-      );
+      setMessage("Choose a quantity within the available stock.");
       return;
     }
 
@@ -180,9 +187,7 @@ function ProductDetailsContent() {
 
           <p className="mt-4">{product.description}</p>
 
-          <p className="mt-4">
-            Already in cart: {inCart}
-          </p>
+          <p className="mt-4">Already in cart: {inCart}</p>
 
           <label
             htmlFor="quantity"
@@ -191,30 +196,48 @@ function ProductDetailsContent() {
             Quantity
           </label>
 
-          <input
-            id="quantity"
-            type="number"
-            min={1}
-            max={Math.max(1, available)}
-            step={1}
-            value={quantity}
-            disabled={available === 0}
-            onChange={(event) => {
-              setQuantity(event.target.valueAsNumber || 1);
-              setMessage("");
-            }}
-            className="mt-2 w-24 rounded border p-3"
-          />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <input
+              id="quantity"
+              type="number"
+              min={1}
+              max={Math.max(1, available)}
+              step={1}
+              value={quantity}
+              disabled={available === 0}
+              onChange={(event) => {
+                setQuantity(event.target.valueAsNumber || 1);
+                setMessage("");
+              }}
+              className="w-24 rounded border p-3"
+            />
+
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              disabled={available === 0}
+              className="rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50"
+            >
+              {available > 0 ? "Add to Cart" : "No more stock"}
+            </button>
+          </div>
 
           <button
             type="button"
-            onClick={handleAddToCart}
-            disabled={available === 0}
-            className="ml-3 rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50"
+            aria-pressed={isWishlisted}
+            onClick={() =>
+              toggleWishlist({
+                id: product.id,
+                name: product.title,
+                price: product.price,
+                thumbnail: product.thumbnail,
+              })
+            }
+            className="mt-4 block rounded border px-4 py-3"
           >
-            {available > 0
-              ? "Add to Cart"
-              : "No more stock"}
+            {isWishlisted
+              ? "Remove from Wishlist"
+              : "Add to Wishlist"}
           </button>
 
           <p className="mt-4" role="status">
