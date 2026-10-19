@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams ,useRouter} from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useCartStore } from "../../stores/cartStore";
 import { useWishlistStore } from "../../stores/wishlistStore";
@@ -21,6 +21,7 @@ type Product = {
 
 function ProductDetailsContent() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
 
   const [quantity, setQuantity] = useState(1);
   const [imageIndex, setImageIndex] = useState(0);
@@ -97,7 +98,28 @@ function ProductDetailsContent() {
   const isWishlisted = wishlistItems.some(
     (item) => item.id === product.id
   );
+function handleBuyNow() {
+  if (!product) return;
 
+  if (
+    !Number.isInteger(quantity) ||
+    quantity < 1 ||
+    quantity > available
+  ) {
+    setMessage("Choose a quantity within the available stock.");
+    return;
+  }
+
+  for (let index = 0; index < quantity; index += 1) {
+    addItem({
+      id: product.id,
+      name: product.title,
+      price: product.price,
+    });
+  }
+
+  router.push("/checkout");
+}
   function handleAddToCart() {
     if (!product) return;
 
@@ -220,6 +242,14 @@ function ProductDetailsContent() {
             >
               {available > 0 ? "Add to Cart" : "No more stock"}
             </button>
+            <button
+  type="button"
+  onClick={handleBuyNow}
+  disabled={available === 0}
+  className="rounded bg-green-700 px-4 py-3 text-white disabled:opacity-50"
+>
+  Buy Now
+</button>
           </div>
 
           <button

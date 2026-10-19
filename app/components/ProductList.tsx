@@ -1,5 +1,5 @@
 "use client";
-
+import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCartStore } from "../stores/cartStore";
@@ -155,8 +155,10 @@ export default function ProductList() {
       </h2>
 
       <p className="mt-3" aria-live="polite">
-        Cart: {count} {count === 1 ? "item" : "items"}
-      </p>
+  <Link href="/cart" className="underline">
+    Cart: {count} {count === 1 ? "item" : "items"}
+  </Link>
+</p>
 
       <input
         type="text"
