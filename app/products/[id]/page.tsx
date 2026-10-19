@@ -210,7 +210,12 @@ function handleBuyNow() {
           <p className="mt-4">{product.description}</p>
 
           <p className="mt-4">Already in cart: {inCart}</p>
-
+<div className="mt-4 rounded border p-3">
+  <h2 className="font-semibold">Available options</h2>
+  <p className="mt-1 text-sm text-gray-600">
+    No size or colour options are provided for this product.
+  </p>
+</div>
           <label
             htmlFor="quantity"
             className="mt-4 block font-semibold"
