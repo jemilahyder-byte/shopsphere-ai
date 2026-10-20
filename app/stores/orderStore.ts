@@ -8,6 +8,8 @@ type OrderItem = {
   name: string;
   price: number;
   quantity: number;
+  size?: string;
+colour?: string;
 };
 
 type Delivery = {

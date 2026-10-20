@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useParams ,useRouter} from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useCartStore } from "../../stores/cartStore";
 import { useWishlistStore } from "../../stores/wishlistStore";
@@ -26,10 +26,11 @@ function ProductDetailsContent() {
   const [quantity, setQuantity] = useState(1);
   const [imageIndex, setImageIndex] = useState(0);
   const [message, setMessage] = useState("");
+  const [size, setSize] = useState("");
+  const [colour, setColour] = useState("");
 
   const items = useCartStore((state) => state.items);
   const addItem = useCartStore((state) => state.addItem);
-
   const wishlistItems = useWishlistStore((state) => state.items);
   const toggleWishlist = useWishlistStore(
     (state) => state.toggleItem
@@ -85,43 +86,51 @@ function ProductDetailsContent() {
     );
   }
 
+  const isClothing = [
+    "mens-shirts",
+    "womens-dresses",
+    "tops",
+  ].includes(product.category);
+
+  const isFootwear = [
+    "mens-shoes",
+    "womens-shoes",
+  ].includes(product.category);
+
+  const sizes = isClothing
+    ? ["S", "M", "L", "XL"]
+    : isFootwear
+      ? ["6", "7", "8", "9", "10"]
+      : [];
+
+  const colours =
+    isClothing || isFootwear ? ["Black", "White", "Blue"] : [];
+
   const images =
-    product.images.length > 0
+    product.images?.length > 0
       ? product.images
       : [product.thumbnail];
 
-  const inCart =
-    items.find((item) => item.id === product.id)?.quantity ?? 0;
+  const inCart = items
+    .filter((item) => item.id === product.id)
+    .reduce((total, item) => total + item.quantity, 0);
 
   const available = Math.max(0, product.stock - inCart);
 
   const isWishlisted = wishlistItems.some(
     (item) => item.id === product.id
   );
-function handleBuyNow() {
-  if (!product) return;
 
-  if (
-    !Number.isInteger(quantity) ||
-    quantity < 1 ||
-    quantity > available
-  ) {
-    setMessage("Choose a quantity within the available stock.");
-    return;
-  }
+  function addSelectedItems(): boolean {
+    if (!product) return false;
 
-  for (let index = 0; index < quantity; index += 1) {
-    addItem({
-      id: product.id,
-      name: product.title,
-      price: product.price,
-    });
-  }
-
-  router.push("/checkout");
-}
-  function handleAddToCart() {
-    if (!product) return;
+    if (
+      sizes.length > 0 &&
+      (!sizes.includes(size) || !colours.includes(colour))
+    ) {
+      setMessage("Please select a size and colour.");
+      return false;
+    }
 
     if (
       !Number.isInteger(quantity) ||
@@ -129,7 +138,7 @@ function handleBuyNow() {
       quantity > available
     ) {
       setMessage("Choose a quantity within the available stock.");
-      return;
+      return false;
     }
 
     for (let index = 0; index < quantity; index += 1) {
@@ -137,11 +146,25 @@ function handleBuyNow() {
         id: product.id,
         name: product.title,
         price: product.price,
+        size: sizes.length > 0 ? size : undefined,
+        colour: colours.length > 0 ? colour : undefined,
       });
     }
 
-    setMessage("Added " + quantity + " item(s) to cart.");
-    setQuantity(1);
+    return true;
+  }
+
+  function handleBuyNow() {
+    if (addSelectedItems()) {
+      router.push("/checkout");
+    }
+  }
+
+  function handleAddToCart() {
+    if (addSelectedItems()) {
+      setMessage("Added " + quantity + " item(s) to cart.");
+      setQuantity(1);
+    }
   }
 
   return (
@@ -164,7 +187,7 @@ function handleBuyNow() {
           <div className="mt-3 flex flex-wrap gap-2">
             {images.map((image, index) => (
               <button
-                key={image}
+                key={image + index}
                 type="button"
                 onClick={() => setImageIndex(index)}
                 aria-label={"View image " + (index + 1)}
@@ -208,14 +231,64 @@ function handleBuyNow() {
           </p>
 
           <p className="mt-4">{product.description}</p>
-
           <p className="mt-4">Already in cart: {inCart}</p>
-<div className="mt-4 rounded border p-3">
-  <h2 className="font-semibold">Available options</h2>
-  <p className="mt-1 text-sm text-gray-600">
-    No size or colour options are provided for this product.
-  </p>
-</div>
+
+          <div className="mt-4 rounded border p-3">
+            <h2 className="font-semibold">Available options</h2>
+
+            {sizes.length > 0 ? (
+              <>
+                <p className="mt-1 text-sm text-gray-600">
+                  Demo choices for this project, not supplier
+                  availability.
+                </p>
+
+                <label className="mt-3 block">
+                  Size
+                  <select
+                    value={size}
+                    onChange={(event) => {
+                      setSize(event.target.value);
+                      setMessage("");
+                    }}
+                    className="mt-1 w-full rounded border bg-white p-2 text-black"
+                  >
+                    <option value="">Select size</option>
+                    {sizes.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="mt-3 block">
+                  Colour
+                  <select
+                    value={colour}
+                    onChange={(event) => {
+                      setColour(event.target.value);
+                      setMessage("");
+                    }}
+                    className="mt-1 w-full rounded border bg-white p-2 text-black"
+                  >
+                    <option value="">Select colour</option>
+                    {colours.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : (
+              <p className="mt-1 text-sm text-gray-600">
+                No size or colour options are provided for this
+                product.
+              </p>
+            )}
+          </div>
+
           <label
             htmlFor="quantity"
             className="mt-4 block font-semibold"
@@ -247,14 +320,15 @@ function handleBuyNow() {
             >
               {available > 0 ? "Add to Cart" : "No more stock"}
             </button>
+
             <button
-  type="button"
-  onClick={handleBuyNow}
-  disabled={available === 0}
-  className="rounded bg-green-700 px-4 py-3 text-white disabled:opacity-50"
->
-  Buy Now
-</button>
+              type="button"
+              onClick={handleBuyNow}
+              disabled={available === 0}
+              className="rounded bg-green-700 px-4 py-3 text-white disabled:opacity-50"
+            >
+              Buy Now
+            </button>
           </div>
 
           <button

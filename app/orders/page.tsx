@@ -40,9 +40,12 @@ export default function OrdersPage() {
 
               <ul className="my-4 space-y-2">
                 {order.items.map((item) => (
-                  <li key={item.id}>
+                  <li key={JSON.stringify([item.id, item.size, item.colour])}>
+                    
                     {item.name} × {item.quantity} — USD $
                     {(item.price * item.quantity).toFixed(2)}
+                  {item.size && <span> — Size: {item.size}</span>}
+{item.colour && <span> — Colour: {item.colour}</span>}  
                   </li>
                 ))}
               </ul>
