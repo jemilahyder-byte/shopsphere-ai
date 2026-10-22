@@ -1,7 +1,8 @@
-"use client";
+                                                                                                                                                                                                                                                                                                                        "use client";
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { calculateCartTotals } from "./cartTotals";
 
 type OrderItem = {
   id: number;
@@ -9,7 +10,7 @@ type OrderItem = {
   price: number;
   quantity: number;
   size?: string;
-colour?: string;
+  colour?: string;
 };
 
 type Delivery = {
@@ -27,6 +28,11 @@ type Order = {
   createdAt: string;
   items: OrderItem[];
   delivery: Delivery;
+  subtotal?: number;
+  discount?: number;
+  shipping?: number;
+  tax?: number;
+  couponCode?: string;
   total: number;
   status: "Placed";
 };
@@ -36,7 +42,8 @@ type OrderStore = {
   placeOrder: (
     userEmail: string,
     items: OrderItem[],
-    delivery: Delivery
+    delivery: Delivery,
+    couponCode?: string
   ) => string;
 };
 
@@ -45,23 +52,50 @@ export const useOrderStore = create<OrderStore>()(
     (set) => ({
       orders: [],
 
-      placeOrder: (userEmail, items, delivery) => {
+      placeOrder: (
+        userEmail,
+        items,
+        delivery,
+        couponCode = ""
+      ) => {
         if (items.length === 0) {
           throw new Error("Your cart is empty.");
+        }
+
+        const normalizedEmail = userEmail
+          .trim()
+          .toLowerCase();
+
+        if (!normalizedEmail) {
+          throw new Error("Please sign in before ordering.");
+        }
+
+        const totals = calculateCartTotals(
+          items,
+          couponCode
+        );
+
+        if (!totals.couponValid) {
+          throw new Error(
+            "Invalid coupon. Return to your cart."
+          );
         }
 
         const id = crypto.randomUUID();
 
         const order: Order = {
           id,
-          userEmail: userEmail.trim().toLowerCase(),
+          userEmail: normalizedEmail,
           createdAt: new Date().toISOString(),
           items: items.map((item) => ({ ...item })),
           delivery: { ...delivery },
-          total: items.reduce(
-            (sum, item) => sum + item.price * item.quantity,
-            0
-          ),
+          subtotal: totals.subtotal,
+
+          discount: totals.discount,
+          shipping: totals.shipping,
+          tax: totals.tax,
+          couponCode: totals.couponCode,
+          total: totals.total,
           status: "Placed",
         };
 
@@ -72,6 +106,8 @@ export const useOrderStore = create<OrderStore>()(
         return id;
       },
     }),
-    { name: "shopsphere-demo-orders" }
+    {
+      name: "shopsphere-demo-orders",
+    }
   )
-);
+);                                                                             
