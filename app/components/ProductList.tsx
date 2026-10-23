@@ -376,8 +376,13 @@ export default function ProductList() {
             </p>
 
             <h3 className="text-lg font-semibold">
-              {product.name}
-            </h3>
+  <Link
+    href={"/products/" + product.id}
+    className="underline"
+  >
+    {product.name}
+  </Link>
+</h3>
 
             <p className="mt-2">
               USD ${product.price.toFixed(2)}
