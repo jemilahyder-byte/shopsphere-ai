@@ -1,11 +1,13 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useCartStore } from "../../stores/cartStore";
 import { useWishlistStore } from "../../stores/wishlistStore";
+import { useRecentlyViewedStore } from "../../stores/recentlyViewedStore";
+import SimilarProducts from "../../components/SimilarProducts";
 
 type Product = {
   id: number;
@@ -21,6 +23,11 @@ type Product = {
 
 function ProductDetailsContent() {
   const { id } = useParams<{ id: string }>();
+
+  return <ProductDetails key={id} id={id} />;
+}
+
+function ProductDetails({ id }: { id: string }) {
   const router = useRouter();
 
   const [quantity, setQuantity] = useState(1);
@@ -35,6 +42,9 @@ function ProductDetailsContent() {
   const toggleWishlist = useWishlistStore(
     (state) => state.toggleItem
   );
+  const recordView = useRecentlyViewedStore(
+    (state) => state.recordView
+  );
 
   const {
     data: product,
@@ -45,7 +55,8 @@ function ProductDetailsContent() {
     queryKey: ["product", id],
     queryFn: async () => {
       const response = await fetch(
-        "https://dummyjson.com/products/" + encodeURIComponent(id)
+        "https://dummyjson.com/products/" +
+          encodeURIComponent(id)
       );
 
       if (!response.ok) {
@@ -55,6 +66,21 @@ function ProductDetailsContent() {
       return response.json();
     },
   });
+
+  useEffect(() => {
+    if (!product || isError || String(product.id) !== id) {
+      return;
+    }
+
+    recordView({
+      id: product.id,
+      name: product.title,
+      price: product.price,
+      thumbnail: product.thumbnail,
+      category: product.category,
+      rating: product.rating,
+    });
+  }, [product, id, isError, recordView]);
 
   if (isPending) {
     return (
@@ -106,10 +132,9 @@ function ProductDetailsContent() {
   const colours =
     isClothing || isFootwear ? ["Black", "White", "Blue"] : [];
 
-  const images =
-    product.images?.length > 0
-      ? product.images
-      : [product.thumbnail];
+  const images = product.images?.length
+    ? product.images
+    : [product.thumbnail];
 
   const inCart = items
     .filter((item) => item.id === product.id)
@@ -354,6 +379,17 @@ function ProductDetailsContent() {
           </p>
         </div>
       </div>
+
+      <SimilarProducts
+        product={{
+          id: product.id,
+          name: product.title,
+          price: product.price,
+          thumbnail: product.thumbnail,
+          category: product.category,
+          rating: product.rating,
+        }}
+      />
     </main>
   );
 }
