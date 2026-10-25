@@ -3,7 +3,10 @@
 import Link from "next/link";
 import RequireAuth from "../components/RequireAuth";
 import { useAuthStore } from "../stores/authStore";
-import { useOrderStore } from "../stores/orderStore";
+import {
+  ORDER_STATUSES,
+  useOrderStore,
+} from "../stores/orderStore";
 
 export default function OrdersPage() {
   const user = useAuthStore((state) => state.user);
@@ -191,14 +194,45 @@ export default function OrdersPage() {
                 </h3>
 
                 <ol className="space-y-2">
-                  <li className="font-semibold text-blue-700">
-                    1. Order placed — complete
-                  </li>
-                  <li>2. Preparing — pending</li>
-                  <li>3. Shipped — pending</li>
-                  <li>4. Out for delivery — pending</li>
-                  <li>5. Delivered — pending</li>
-                </ol>
+  {ORDER_STATUSES.map((status, index) => {
+    const currentIndex = ORDER_STATUSES.indexOf(
+      order.status
+    );
+
+    const isComplete = index < currentIndex;
+    const isCurrent = index === currentIndex;
+
+    return (
+      <li
+        key={status}
+        aria-current={isCurrent ? "step" : undefined}
+        className={
+          isCurrent
+            ? "font-semibold text-blue-700"
+            : isComplete
+              ? "text-green-700"
+              : "text-gray-600"
+        }
+      >
+        {index + 1}. {status} —{" "}
+        {isComplete
+          ? "Complete"
+          : isCurrent
+            ? status === "Delivered"
+              ? "Complete"
+              : "Current status"
+            : "Pending"}
+      </li>
+    );
+  })}
+</ol>
+
+{order.statusUpdatedAt && (
+  <p className="mt-3 text-sm">
+    Last updated:{" "}
+    {new Date(order.statusUpdatedAt).toLocaleString()}
+  </p>
+)}
 
                 <p className="mt-3 text-sm text-gray-600">
                   This is a demo tracking display.

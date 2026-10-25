@@ -3,6 +3,17 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { calculateCartTotals } from "./cartTotals";
+import { useAuthStore } from "./authStore";
+
+export const ORDER_STATUSES = [
+  "Placed",
+  "Processing",
+  "Shipped",
+  "Delivered",
+] as const;
+
+export type OrderStatus =
+  (typeof ORDER_STATUSES)[number];
 
 type OrderItem = {
   id: number;
@@ -44,7 +55,8 @@ type Order = {
   paymentStatus?: "Demo paid";
   estimatedDeliveryAt?: string;
   total: number;
-  status: "Placed";
+  status: OrderStatus;
+  statusUpdatedAt?: string;
 };
 
 type OrderStore = {
@@ -57,11 +69,16 @@ type OrderStore = {
     couponCode?: string,
     options?: OrderOptions
   ) => string;
+
+  updateOrderStatus: (
+    orderId: string,
+    status: OrderStatus
+  ) => void;
 };
 
 export const useOrderStore = create<OrderStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       orders: [],
 
       placeOrder: (
@@ -141,6 +158,55 @@ export const useOrderStore = create<OrderStore>()(
         }));
 
         return id;
+      },
+
+      updateOrderStatus: (orderId, status) => {
+        const user = useAuthStore.getState().user;
+
+        if (!user || user.role !== "admin") {
+          throw new Error(
+            "Only an admin can update order status."
+          );
+        }
+
+        if (!ORDER_STATUSES.includes(status)) {
+          throw new Error("Invalid order status.");
+        }
+
+        const order = get().orders.find(
+          (item) => item.id === orderId
+        );
+
+        if (!order) {
+          throw new Error("Order not found.");
+        }
+
+        const currentIndex =
+          ORDER_STATUSES.indexOf(order.status);
+
+        const nextIndex =
+          ORDER_STATUSES.indexOf(status);
+
+        if (nextIndex === currentIndex) return;
+
+        if (nextIndex !== currentIndex + 1) {
+          throw new Error(
+            "Please move the order to the next status."
+          );
+        }
+
+        set((state) => ({
+          orders: state.orders.map((item) =>
+            item.id === orderId
+              ? {
+                  ...item,
+                  status,
+                  statusUpdatedAt:
+                    new Date().toISOString(),
+                }
+              : item
+          ),
+        }));
       },
     }),
     {
