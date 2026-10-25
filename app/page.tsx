@@ -7,7 +7,7 @@ import CartRecommendations from "./components/CartRecommendations";
 import FrequentlyBoughtTogether from "./components/FrequentlyBoughtTogether";
 import TrendingRecommendations from "./components/TrendingRecommendations";
 import PersonalizedRecommendations from "./components/PersonalizedRecommendations";
-
+import ShoppingChatbot from "./components/ShoppingChatbot";
 export default function Home() {
   return (
     <main className="mx-auto max-w-4xl p-6">
@@ -27,6 +27,7 @@ export default function Home() {
       <FrequentlyBoughtTogether />
       <TrendingRecommendations />
       <PersonalizedRecommendations />
+      <ShoppingChatbot />
       <ProductList />
     </main>
   );
