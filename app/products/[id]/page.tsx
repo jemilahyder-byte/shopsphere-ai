@@ -8,7 +8,7 @@ import { useCartStore } from "../../stores/cartStore";
 import { useWishlistStore } from "../../stores/wishlistStore";
 import { useRecentlyViewedStore } from "../../stores/recentlyViewedStore";
 import SimilarProducts from "../../components/SimilarProducts";
-
+import ProductReviews from "../../components/ProductReviews";
 type Product = {
   id: number;
   title: string;
@@ -379,6 +379,10 @@ function ProductDetails({ id }: { id: string }) {
           </p>
         </div>
       </div>
+      <ProductReviews
+        key={product.id}
+        productId={product.id}
+      />
 
       <SimilarProducts
         product={{
