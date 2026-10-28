@@ -6,6 +6,7 @@ import RequireAuth from "../components/RequireAuth";
 import { useAuthStore } from "../stores/authStore";
 import { useCartStore } from "../stores/cartStore";
 import { useOrderStore } from "../stores/orderStore";
+import { useProductStore } from "../stores/productStore";
 import {
   createCheckoutDraft,
   useCheckoutStore,
@@ -177,50 +178,112 @@ export default function CheckoutPage() {
 
       const ids = [...new Set(orderItems.map((item) => item.id))];
 
+     const productState = useProductStore.getState();
+
+      const productSnapshot = JSON.stringify({
+        customProducts: productState.customProducts,
+        overrides: productState.overrides,
+        hiddenIds: productState.hiddenIds,
+      });
+
       await Promise.all(
         ids.map(async (id) => {
-          const response = await fetch(
-            "https://dummyjson.com/products/" + id,
-            {
-              cache: "no-store",
-              signal: AbortSignal.timeout(15000),
-            }
-          );
-
-          if (!response.ok) {
+          if (productState.hiddenIds.includes(id)) {
             throw new Error(
-              "Unable to confirm stock. Please retry."
+              "A product is no longer available. Remove it from your cart."
             );
           }
 
-          const product = await response.json();
+          let product =
+            productState.customProducts.find(
+              (item) => item.id === id
+            ) ?? productState.overrides[id];
+
+          if (!product) {
+            const response = await fetch(
+              "https://dummyjson.com/products/" + id,
+              {
+                cache: "no-store",
+                signal: AbortSignal.timeout(15000),
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(
+                "Unable to confirm stock. Please retry."
+              );
+            }
+
+            product = await response.json();
+          }
 
           if (
+            !product ||
             product.id !== id ||
             !Number.isInteger(product.stock) ||
-            product.stock < 0
+            product.stock < 0 ||
+            !Number.isFinite(product.price) ||
+            product.price <= 0
           ) {
-            throw new Error("Invalid stock information.");
+            throw new Error("Invalid product information.");
           }
 
-          const quantity = orderItems
-            .filter((item) => item.id === id)
-            .reduce((sum, item) => sum + item.quantity, 0);
+          const matchingItems = orderItems.filter(
+            (item) => item.id === id
+          );
 
-          if (product.stock === 0 || quantity > product.stock) {
-            const item = orderItems.find(
-              (entry) => entry.id === id
-            );
+          const quantity = matchingItems.reduce(
+            (sum, item) => sum + item.quantity,
+            0
+          );
 
+          if (
+            matchingItems.some(
+              (item) =>
+                !Number.isInteger(item.quantity) ||
+                item.quantity < 1
+            )
+          ) {
             throw new Error(
-              (item?.name ?? "Product") +
+              "Invalid quantity. Update your cart."
+            );
+          }
+
+          if (quantity > product.stock) {
+            throw new Error(
+              product.title +
                 ": only " +
                 product.stock +
                 " available. Update your cart."
             );
           }
+
+          if (
+            matchingItems.some(
+              (item) => item.price !== product.price
+            )
+          ) {
+            throw new Error(
+              product.title +
+                ": price changed. Remove it from your cart and add it again from the shop."
+            );
+          }
         })
       );
+
+      const latestProducts = useProductStore.getState();
+
+      if (
+        JSON.stringify({
+          customProducts: latestProducts.customProducts,
+          overrides: latestProducts.overrides,
+          hiddenIds: latestProducts.hiddenIds,
+        }) !== productSnapshot
+      ) {
+        throw new Error(
+          "Products changed. Review your order and retry."
+        );
+      }
 
       const latestUser = useAuthStore.getState().user;
       const latestCart = useCartStore.getState();

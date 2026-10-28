@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useProductStore } from "../stores/productStore";
 import {
   getSimilarProducts,
   type RecommendationProduct,
@@ -65,8 +66,39 @@ export default function SimilarProducts({
     staleTime: 5 * 60 * 1000,
   });
 
+  const customProducts = useProductStore(
+    (state) => state.customProducts
+  );
+  const overrides = useProductStore(
+    (state) => state.overrides
+  );
+  const hiddenIds = useProductStore(
+    (state) => state.hiddenIds
+  );
+
+  const managedProducts = [
+    ...customProducts,
+    ...Object.values(overrides),
+  ].map((item) => ({
+    id: item.id,
+    name: item.title,
+    price: item.price,
+    thumbnail: item.thumbnail,
+    category: item.category,
+    rating: item.rating,
+  }));
+
+  const managedIds = new Set(
+    managedProducts.map((item) => item.id)
+  );
+
+  const catalog = [
+    ...managedProducts,
+    ...products.filter((item) => !managedIds.has(item.id)),
+  ].filter((item) => !hiddenIds.includes(item.id));
+
   const similarProducts = getSimilarProducts(
-    products,
+    catalog,
     product
   );
 

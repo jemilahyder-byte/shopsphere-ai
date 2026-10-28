@@ -8,7 +8,7 @@ import {
   useOrderStore,
   type OrderStatus,
 } from "../stores/orderStore";
-
+import AdminProducts from "../components/AdminProducts";
 function AdminContent() {
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState("");
@@ -187,6 +187,7 @@ function AdminContent() {
           })}
         </div>
       )}
+      <AdminProducts/>
     </main>
   );
 }

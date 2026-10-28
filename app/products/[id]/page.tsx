@@ -9,6 +9,7 @@ import { useWishlistStore } from "../../stores/wishlistStore";
 import { useRecentlyViewedStore } from "../../stores/recentlyViewedStore";
 import SimilarProducts from "../../components/SimilarProducts";
 import ProductReviews from "../../components/ProductReviews";
+import { useProductStore } from "../../stores/productStore";
 type Product = {
   id: number;
   title: string;
@@ -46,13 +47,28 @@ function ProductDetails({ id }: { id: string }) {
     (state) => state.recordView
   );
 
+  const customProduct = useProductStore((state) =>
+    state.customProducts.find(
+      (item) => item.id === Number(id)
+    )
+  );
+  const override = useProductStore(
+    (state) => state.overrides[Number(id)]
+  );
+  const isHidden = useProductStore((state) =>
+    state.hiddenIds.includes(Number(id))
+  );
+
+  const managedProduct = customProduct ?? override;
+
   const {
-    data: product,
-    isPending,
-    isError,
+    data: apiProduct,
+    isPending: apiPending,
+    isError: apiError,
     refetch,
   } = useQuery<Product>({
     queryKey: ["product", id],
+    enabled: !managedProduct && !isHidden,
     queryFn: async () => {
       const response = await fetch(
         "https://dummyjson.com/products/" +
@@ -66,6 +82,16 @@ function ProductDetails({ id }: { id: string }) {
       return response.json();
     },
   });
+
+  const product = isHidden
+    ? undefined
+    : managedProduct ?? apiProduct;
+
+  const isPending =
+    !isHidden && !managedProduct && apiPending;
+
+  const isError =
+    isHidden || (!managedProduct && apiError);
 
   useEffect(() => {
     if (!product || isError || String(product.id) !== id) {

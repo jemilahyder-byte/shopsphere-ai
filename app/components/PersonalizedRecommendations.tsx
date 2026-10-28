@@ -8,6 +8,7 @@ import { useCartStore } from "../stores/cartStore";
 import { useWishlistStore } from "../stores/wishlistStore";
 import { useOrderStore } from "../stores/orderStore";
 import { useRecentlyViewedStore } from "../stores/recentlyViewedStore";
+import { useProductStore } from "../stores/productStore";
 import {
   getPersonalizedRecommendations,
   type RecommendationProduct,
@@ -22,9 +23,7 @@ type ApiProduct = {
   rating: number;
 };
 
-async function fetchProducts(): Promise<
-  RecommendationProduct[]
-> {
+async function fetchProducts(): Promise<RecommendationProduct[]> {
   const response = await fetch(
     "https://dummyjson.com/products?limit=0"
   );
@@ -59,22 +58,51 @@ export default function PersonalizedRecommendations() {
   const viewedProducts = useRecentlyViewedStore(
     (state) => state.products
   );
+  const customProducts = useProductStore(
+    (state) => state.customProducts
+  );
+  const overrides = useProductStore(
+    (state) => state.overrides
+  );
+  const hiddenIds = useProductStore(
+    (state) => state.hiddenIds
+  );
 
   useEffect(() => {
     let active = true;
 
-    async function loadWishlist() {
+    async function loadPreferences() {
       try {
         if (!useWishlistStore.persist.hasHydrated()) {
           await useWishlistStore.persist.rehydrate();
         }
 
+        if (!useCartStore.persist.hasHydrated()) {
+          await useCartStore.persist.rehydrate();
+        }
+
+        if (!useOrderStore.persist.hasHydrated()) {
+          await useOrderStore.persist.rehydrate();
+        }
+
+        if (!useRecentlyViewedStore.persist.hasHydrated()) {
+          await useRecentlyViewedStore.persist.rehydrate();
+        }
+
+        if (!useProductStore.persist.hasHydrated()) {
+          await useProductStore.persist.rehydrate();
+        }
+
+        const hydrated =
+          useWishlistStore.persist.hasHydrated() &&
+          useCartStore.persist.hasHydrated() &&
+          useOrderStore.persist.hasHydrated() &&
+          useRecentlyViewedStore.persist.hasHydrated() &&
+          useProductStore.persist.hasHydrated();
+
         if (active) {
-          if (useWishlistStore.persist.hasHydrated()) {
-            setReady(true);
-          } else {
-            setStorageError(true);
-          }
+          setReady(hydrated);
+          setStorageError(!hydrated);
         }
       } catch {
         if (active) {
@@ -83,7 +111,7 @@ export default function PersonalizedRecommendations() {
       }
     }
 
-    void loadWishlist();
+    void loadPreferences();
 
     return () => {
       active = false;
@@ -117,10 +145,31 @@ export default function PersonalizedRecommendations() {
     enabled: ready && hasActivity,
   });
 
+  const managedProducts: RecommendationProduct[] = [
+    ...customProducts,
+    ...Object.values(overrides),
+  ].map((item) => ({
+    id: item.id,
+    name: item.title,
+    price: item.price,
+    thumbnail: item.thumbnail,
+    category: item.category,
+    rating: item.rating,
+  }));
+
+  const managedIds = new Set(
+    managedProducts.map((item) => item.id)
+  );
+
+  const catalog = [
+    ...managedProducts,
+    ...products.filter((item) => !managedIds.has(item.id)),
+  ].filter((item) => !hiddenIds.includes(item.id));
+
   const recommendations = getPersonalizedRecommendations(
-    products,
+    catalog,
     {
-      viewedIds: viewedProducts.map((product) => product.id),
+      viewedIds: viewedProducts.map((item) => item.id),
       wishlistIds: wishlistItems.map((item) => item.id),
       cartIds: cartItems.map((item) => item.id),
       orders: myOrders,
@@ -141,7 +190,7 @@ export default function PersonalizedRecommendations() {
 
       <p className="mb-4 text-sm text-gray-600">
         Based on browsing, wishlist and cart activity
-        on this browser, plus your signed-in account's
+        on this browser, plus your signed-in account&apos;s
         demo orders.
       </p>
 

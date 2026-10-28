@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import {useProductStore} from "../stores/productStore";
 import {
   getCategoryRecommendations,
   type RecommendationProduct,
@@ -55,17 +56,50 @@ export default function CategoryRecommendations() {
     queryFn: fetchProducts,
     staleTime: 5 * 60 * 1000,
   });
+const customProducts = useProductStore(
+    (state) => state.customProducts
+  );
+  const overrides = useProductStore(
+    (state) => state.overrides
+  );
+  const hiddenIds = useProductStore(
+    (state) => state.hiddenIds
+  );
+
+  const managedProducts = [
+    ...customProducts,
+    ...Object.values(overrides),
+  ].map((item) => ({
+    id: item.id,
+    name: item.title,
+    price: item.price,
+    thumbnail: item.thumbnail,
+    category: item.category,
+    rating: item.rating,
+  }));
+
+  const managedIds = new Set(
+    managedProducts.map((item) => item.id)
+  );
+
+  const catalog = [
+    ...managedProducts,
+    ...products.filter((item) => !managedIds.has(item.id)),
+  ].filter((item) => !hiddenIds.includes(item.id));
 
   const categories = Array.from(
-    new Set(products.map((product) => product.category))
+    new Set(catalog.map((item) => item.category))
   ).sort();
 
-  const category = selectedCategory || categories[0] || "";
+  const category = categories.includes(selectedCategory)
+    ? selectedCategory
+    : categories[0] ?? "";
 
   const recommendations = getCategoryRecommendations(
-    products,
+    catalog,
     category
   );
+
 
   return (
     <section

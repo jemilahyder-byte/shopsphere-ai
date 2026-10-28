@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCartStore } from "../stores/cartStore";
-
+import { useProductStore } from "../stores/productStore";
 type Product = {
   id: number;
   name: string;
@@ -58,7 +58,7 @@ export default function ProductList() {
   const addItem = useCartStore((state) => state.addItem);
 
   const {
-    data: products = [],
+    data: apiProducts =[],
     isPending,
     isError,
     refetch,
@@ -67,6 +67,40 @@ export default function ProductList() {
     queryFn: fetchProducts,
     staleTime: 5 * 60 * 1000,
   });
+  const customProducts = useProductStore(
+    (state) => state.customProducts
+  );
+  const overrides = useProductStore(
+    (state) => state.overrides
+  );
+  const hiddenIds = useProductStore(
+    (state) => state.hiddenIds
+  );
+
+  const products: Product[] = [
+    ...customProducts.map((product) => ({
+      id: product.id,
+      name: product.title,
+      price: product.price,
+      thumbnail: product.thumbnail,
+      category: product.category,
+      rating: product.rating,
+    })),
+    ...apiProducts.map((product) => {
+      const updated = overrides[product.id];
+
+      return updated
+        ? {
+            id: updated.id,
+            name: updated.title,
+            price: updated.price,
+            thumbnail: updated.thumbnail,
+            category: updated.category,
+            rating: updated.rating,
+          }
+        : product;
+    }),
+  ].filter((product) => !hiddenIds.includes(product.id));
 
   function toggleCompare(id: number) {
     setCompareIds((current) => {
