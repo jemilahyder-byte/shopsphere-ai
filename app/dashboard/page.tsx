@@ -1,23 +1,138 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import RequireAuth from "../components/RequireAuth";
+import AddressManager from "../components/AddressManager";
+import RecommendationPreferences from "../components/RecommendationPreferences";
 import { useAuthStore } from "../stores/authStore";
 import { useOrderStore } from "../stores/orderStore";
 
-function DashboardContent() {
-  const [ready, setReady] = useState(false);
+function subscribeToHydration(
+  notify: () => void
+): () => void {
+  const subscriptions = [
+    useOrderStore.persist.onHydrate(() => notify()),
+    useOrderStore.persist.onFinishHydration(() => notify()),
+  ];
 
+  return () => {
+    subscriptions.forEach((unsubscribe) => unsubscribe());
+  };
+}
+
+function getHydrationSnapshot(): boolean {
+  return useOrderStore.persist.hasHydrated();
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+function ProfileForm() {
+  const user = useAuthStore((state) => state.user);
+  const updateProfile = useAuthStore(
+    (state) => state.updateProfile
+  );
+
+  const [name, setName] = useState(user?.name ?? "");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  if (!user) return null;
+
+  return (
+    <section className="mt-6 rounded border p-5">
+      <h2 className="text-xl font-bold">
+        My profile
+      </h2>
+
+      <p className="mt-2 break-all">
+        Email: {user.email}
+      </p>
+
+      <form
+        className="mt-4 space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setMessage("");
+          setError("");
+
+          try {
+            updateProfile(name);
+            setName(name.trim());
+            setMessage("Profile updated.");
+          } catch (problem) {
+            setError(
+              problem instanceof Error
+                ? problem.message
+                : "Unable to update profile."
+            );
+          }
+        }}
+      >
+        <label
+          htmlFor="profile-name"
+          className="block"
+        >
+          Name
+        </label>
+
+        <input
+          id="profile-name"
+          autoComplete="name"
+          value={name}
+          onChange={(event) => {
+            setName(event.target.value);
+            setMessage("");
+            setError("");
+          }}
+          minLength={2}
+          maxLength={100}
+          required
+          className="w-full rounded border p-3"
+        />
+
+        <button
+          type="submit"
+          className="rounded bg-blue-700 px-4 py-2 text-white"
+        >
+          Save profile
+        </button>
+
+        {message && (
+          <p role="status">{message}</p>
+        )}
+
+        {error && (
+          <p role="alert" className="text-red-700">
+            {error}
+          </p>
+        )}
+      </form>
+    </section>
+  );
+}
+
+function DashboardContent() {
   const user = useAuthStore((state) => state.user);
   const orders = useOrderStore((state) => state.orders);
 
-  useEffect(() => {
-    setReady(true);
-  }, []);
+  const ready = useSyncExternalStore(
+    subscribeToHydration,
+    getHydrationSnapshot,
+    getServerSnapshot
+  );
 
   if (!ready || !user) {
-    return <p className="p-6">Loading dashboard...</p>;
+    return (
+      <p role="status" className="p-6">
+        Loading dashboard...
+      </p>
+    );
   }
 
   const email = user.email.trim().toLowerCase();
@@ -52,12 +167,15 @@ function DashboardContent() {
         My Dashboard
       </h1>
 
-      <section className="mt-6 rounded border p-5">
-        <h2 className="text-xl font-bold">
-          Welcome, {user.name}
-        </h2>
-        <p className="mt-2 break-all">{user.email}</p>
-      </section>
+      <p className="mt-4 text-xl">
+        Welcome, {user.name}
+      </p>
+
+      <ProfileForm key={email} />
+
+      <AddressManager />
+
+      <RecommendationPreferences />
 
       <p className="mt-4 text-sm text-gray-600">
         Demo orders saved in this browser.
@@ -66,14 +184,20 @@ function DashboardContent() {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <section className="rounded border p-5">
-          <h2 className="font-semibold">My orders</h2>
+          <h2 className="font-semibold">
+            My orders
+          </h2>
+
           <p className="mt-2 text-2xl">
             {myOrders.length}
           </p>
         </section>
 
         <section className="rounded border p-5">
-          <h2 className="font-semibold">Active orders</h2>
+          <h2 className="font-semibold">
+            Active orders
+          </h2>
+
           <p className="mt-2 text-2xl">
             {activeOrders}
           </p>
@@ -83,6 +207,7 @@ function DashboardContent() {
           <h2 className="font-semibold">
             Demo spending
           </h2>
+
           <p className="mt-2 text-2xl">
             USD ${totalSpent.toFixed(2)}
           </p>

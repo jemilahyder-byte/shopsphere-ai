@@ -13,17 +13,31 @@ export type Review = {
   comment: string;
   createdAt: string;
   updatedAt: string;
+  helpfulVoters?: string[];
 };
 
 type ReviewStore = {
   reviews: Review[];
+
   saveReview: (
     productId: number,
     rating: number,
     comment: string
   ) => void;
+
   deleteReview: (reviewId: string) => void;
+  toggleHelpful: (reviewId: string) => void;
 };
+
+function requireEmail(): string {
+  const user = useAuthStore.getState().user;
+
+  if (!user) {
+    throw new Error("Please log in.");
+  }
+
+  return user.email.trim().toLowerCase();
+}
 
 export const useReviewStore = create<ReviewStore>()(
   persist(
@@ -34,7 +48,9 @@ export const useReviewStore = create<ReviewStore>()(
         const user = useAuthStore.getState().user;
 
         if (!user) {
-          throw new Error("Please log in to write a review.");
+          throw new Error(
+            "Please log in to write a review."
+          );
         }
 
         if (
@@ -49,7 +65,9 @@ export const useReviewStore = create<ReviewStore>()(
           rating < 1 ||
           rating > 5
         ) {
-          throw new Error("Choose a rating from 1 to 5.");
+          throw new Error(
+            "Choose a rating from 1 to 5."
+          );
         }
 
         const text = comment.trim();
@@ -66,7 +84,7 @@ export const useReviewStore = create<ReviewStore>()(
         const existing = get().reviews.find(
           (review) =>
             review.productId === productId &&
-            review.userEmail === email
+            review.userEmail.trim().toLowerCase() === email
         );
 
         if (existing) {
@@ -83,6 +101,7 @@ export const useReviewStore = create<ReviewStore>()(
                 : review
             ),
           }));
+
           return;
         }
 
@@ -95,6 +114,7 @@ export const useReviewStore = create<ReviewStore>()(
           comment: text,
           createdAt: now,
           updatedAt: now,
+          helpfulVoters: [],
         };
 
         set((state) => ({
@@ -103,11 +123,7 @@ export const useReviewStore = create<ReviewStore>()(
       },
 
       deleteReview: (reviewId) => {
-        const user = useAuthStore.getState().user;
-
-        if (!user) {
-          throw new Error("Please log in.");
-        }
+        const email = requireEmail();
 
         const review = get().reviews.find(
           (item) => item.id === reviewId
@@ -117,9 +133,9 @@ export const useReviewStore = create<ReviewStore>()(
           throw new Error("Review not found.");
         }
 
-        const email = user.email.trim().toLowerCase();
-
-        if (review.userEmail !== email) {
+        if (
+          review.userEmail.trim().toLowerCase() !== email
+        ) {
           throw new Error(
             "You can only delete your own review."
           );
@@ -130,6 +146,51 @@ export const useReviewStore = create<ReviewStore>()(
             (item) => item.id !== reviewId
           ),
         }));
+      },
+
+      toggleHelpful: (reviewId) => {
+        const email = requireEmail();
+
+        set((state) => {
+          const target = state.reviews.find(
+            (review) => review.id === reviewId
+          );
+
+          if (!target) {
+            throw new Error("Review not found.");
+          }
+
+          if (
+            target.userEmail.trim().toLowerCase() === email
+          ) {
+            throw new Error(
+              "You cannot vote on your own review."
+            );
+          }
+
+          const voters = [
+            ...new Set(
+              (target.helpfulVoters ?? []).map(
+                (voter) => voter.trim().toLowerCase()
+              )
+            ),
+          ];
+
+          const nextVoters = voters.includes(email)
+            ? voters.filter((voter) => voter !== email)
+            : [...voters, email];
+
+          return {
+            reviews: state.reviews.map((review) =>
+              review.id === reviewId
+                ? {
+                    ...review,
+                    helpfulVoters: nextVoters,
+                  }
+                : review
+            ),
+          };
+        });
       },
     }),
     {

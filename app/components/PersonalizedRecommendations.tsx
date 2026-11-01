@@ -9,6 +9,7 @@ import { useWishlistStore } from "../stores/wishlistStore";
 import { useOrderStore } from "../stores/orderStore";
 import { useRecentlyViewedStore } from "../stores/recentlyViewedStore";
 import { useProductStore } from "../stores/productStore";
+import { DEFAULT_PREFERENCES, usePreferenceStore } from "../stores/preferenceStore";
 import {
   getPersonalizedRecommendations,
   type RecommendationProduct,
@@ -23,7 +24,9 @@ type ApiProduct = {
   rating: number;
 };
 
-async function fetchProducts(): Promise<RecommendationProduct[]> {
+async function fetchProducts(): Promise<
+  RecommendationProduct[]
+> {
   const response = await fetch(
     "https://dummyjson.com/products?limit=0"
   );
@@ -67,12 +70,23 @@ export default function PersonalizedRecommendations() {
   const hiddenIds = useProductStore(
     (state) => state.hiddenIds
   );
+  const preferencesByEmail = usePreferenceStore(
+    (state) => state.preferencesByEmail
+  );
 
   useEffect(() => {
     let active = true;
 
-    async function loadPreferences() {
+    async function restoreStores() {
       try {
+        if (!useAuthStore.persist.hasHydrated()) {
+          await useAuthStore.persist.rehydrate();
+        }
+
+        if (!usePreferenceStore.persist.hasHydrated()) {
+          await usePreferenceStore.persist.rehydrate();
+        }
+
         if (!useWishlistStore.persist.hasHydrated()) {
           await useWishlistStore.persist.rehydrate();
         }
@@ -94,6 +108,8 @@ export default function PersonalizedRecommendations() {
         }
 
         const hydrated =
+          useAuthStore.persist.hasHydrated() &&
+          usePreferenceStore.persist.hasHydrated() &&
           useWishlistStore.persist.hasHydrated() &&
           useCartStore.persist.hasHydrated() &&
           useOrderStore.persist.hasHydrated() &&
@@ -105,13 +121,11 @@ export default function PersonalizedRecommendations() {
           setStorageError(!hydrated);
         }
       } catch {
-        if (active) {
-          setStorageError(true);
-        }
+        if (active) setStorageError(true);
       }
     }
 
-    void loadPreferences();
+    void restoreStores();
 
     return () => {
       active = false;
@@ -119,6 +133,10 @@ export default function PersonalizedRecommendations() {
   }, []);
 
   const email = user?.email.trim().toLowerCase();
+
+  const preferences = email
+    ? preferencesByEmail[email] ?? DEFAULT_PREFERENCES
+    : DEFAULT_PREFERENCES;
 
   const myOrders = email
     ? orders.filter(
@@ -142,39 +160,118 @@ export default function PersonalizedRecommendations() {
     queryKey: ["recommendations", "catalog"],
     queryFn: fetchProducts,
     staleTime: 5 * 60 * 1000,
-    enabled: ready && hasActivity,
+    enabled: ready && preferences.enabled && hasActivity,
   });
 
-  const managedProducts: RecommendationProduct[] = [
-    ...customProducts,
-    ...Object.values(overrides),
-  ].map((item) => ({
-    id: item.id,
-    name: item.title,
-    price: item.price,
-    thumbnail: item.thumbnail,
-    category: item.category,
-    rating: item.rating,
-  }));
+  const catalogById = new Map<
+    number,
+    RecommendationProduct
+  >();
 
-  const managedIds = new Set(
-    managedProducts.map((item) => item.id)
+  for (const product of products) {
+    catalogById.set(product.id, product);
+  }
+
+  for (const product of Object.values(overrides)) {
+    catalogById.set(product.id, {
+      id: product.id,
+      name: product.title,
+      price: product.price,
+      thumbnail: product.thumbnail,
+      category: product.category,
+      rating: product.rating,
+    });
+  }
+
+  for (const product of customProducts) {
+    catalogById.set(product.id, {
+      id: product.id,
+      name: product.title,
+      price: product.price,
+      thumbnail: product.thumbnail,
+      category: product.category,
+      rating: product.rating,
+    });
+  }
+
+  for (const id of hiddenIds) {
+    catalogById.delete(id);
+  }
+
+  const catalog = Array.from(catalogById.values());
+
+  const allowedCategories = new Set(
+    preferences.preferredCategories
   );
 
-  const catalog = [
-    ...managedProducts,
-    ...products.filter((item) => !managedIds.has(item.id)),
-  ].filter((item) => !hiddenIds.includes(item.id));
+  const excludedIds = new Set([
+    ...viewedProducts.map((product) => product.id),
+    ...wishlistItems.map((product) => product.id),
+    ...cartItems.map((product) => product.id),
+    ...myOrders.flatMap((order) =>
+      order.items.map((product) => product.id)
+    ),
+  ]);
 
-  const recommendations = getPersonalizedRecommendations(
+  function matchesPreferences(
+    product: RecommendationProduct
+  ) {
+    return (
+      (
+        allowedCategories.size === 0 ||
+        allowedCategories.has(
+          product.category.trim().toLowerCase()
+        )
+      ) &&
+      (
+        preferences.maxPrice === null ||
+        product.price <= preferences.maxPrice
+      )
+    );
+  }
+
+  const ranked = getPersonalizedRecommendations(
     catalog,
     {
-      viewedIds: viewedProducts.map((item) => item.id),
-      wishlistIds: wishlistItems.map((item) => item.id),
-      cartIds: cartItems.map((item) => item.id),
+      viewedIds: viewedProducts.map((product) => product.id),
+      wishlistIds: wishlistItems.map(
+        (product) => product.id
+      ),
+      cartIds: cartItems.map((product) => product.id),
       orders: myOrders,
     }
   );
+
+  const hasFilters =
+    allowedCategories.size > 0 ||
+    preferences.maxPrice !== null;
+
+  const matchingRanked = ranked.filter(
+    matchesPreferences
+  );
+
+  const matchingFallback = hasFilters
+    ? catalog
+        .filter(
+          (product) =>
+            !excludedIds.has(product.id) &&
+            matchesPreferences(product)
+        )
+        .sort(
+          (a, b) =>
+            b.rating - a.rating ||
+            a.price - b.price ||
+            a.id - b.id
+        )
+    : [];
+
+  const recommendations = Array.from(
+    new Map(
+      [...matchingRanked, ...matchingFallback].map(
+        (product) => [product.id, product]
+      )
+    ).values()
+  ).slice(0, 6);
 
   return (
     <section
@@ -191,15 +288,31 @@ export default function PersonalizedRecommendations() {
       <p className="mb-4 text-sm text-gray-600">
         Based on browsing, wishlist and cart activity
         on this browser, plus your signed-in account&apos;s
-        demo orders.
+        demo orders. Saved category and budget preferences
+        filter these suggestions.
       </p>
+
+      {ready && email && (
+        <Link
+          href="/dashboard"
+          className="mb-4 inline-block underline"
+        >
+          Manage recommendation preferences
+        </Link>
+      )}
 
       {storageError ? (
         <p role="alert">
-          Unable to load saved preferences. Refresh to retry.
+          Unable to load saved preferences.
+          Refresh to retry.
         </p>
       ) : !ready ? (
         <p role="status">Loading your preferences...</p>
+      ) : !preferences.enabled ? (
+        <p role="status">
+          Personalized recommendations are turned off.
+          You can enable them in My Dashboard.
+        </p>
       ) : !hasActivity ? (
         <p>
           View products or add favourites to get
@@ -221,8 +334,9 @@ export default function PersonalizedRecommendations() {
         </div>
       ) : recommendations.length === 0 ? (
         <p role="status">
-          No new matching products yet. Explore more
-          categories to discover recommendations.
+          No new products match your activity and
+          preferences. Explore more products or change
+          your category and budget settings.
         </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

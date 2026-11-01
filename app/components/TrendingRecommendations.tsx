@@ -1,16 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useOrderStore } from "../stores/orderStore";
 import { useProductStore } from "../stores/productStore";
-import {
-  getTrendingRecommendations,
-  type RecommendationProduct,
-} from "../lib/recommendations";
 
-type ApiProduct = {
+type Product = {
   id: number;
   title: string;
   price: number;
@@ -19,162 +15,204 @@ type ApiProduct = {
   rating: number;
 };
 
-async function fetchProducts(): Promise<
-  RecommendationProduct[]
-> {
+async function fetchProducts(): Promise<Product[]> {
   const response = await fetch(
-    "https://dummyjson.com/products?limit=0"
+    "https://dummyjson.com/products?limit=100"
   );
 
   if (!response.ok) {
-    throw new Error("Unable to load recommendations.");
+    throw new Error("Unable to load trending products.");
   }
 
-  const data: { products: ApiProduct[] } =
+  const data: { products: Product[] } =
     await response.json();
 
-  return data.products.map((product) => ({
-    id: product.id,
-    name: product.title,
-    price: product.price,
-    thumbnail: product.thumbnail,
-    category: product.category,
-    rating: product.rating,
-  }));
+  return data.products;
+}
+
+function subscribeToHydration(notify: () => void) {
+  const subscriptions = [
+    useOrderStore.persist.onHydrate(() => notify()),
+    useOrderStore.persist.onFinishHydration(() => notify()),
+    useProductStore.persist.onHydrate(() => notify()),
+    useProductStore.persist.onFinishHydration(() => notify()),
+  ];
+
+  return () => {
+    subscriptions.forEach((unsubscribe) => unsubscribe());
+  };
+}
+
+function getHydrationSnapshot() {
+  return (
+    useOrderStore.persist.hasHydrated() &&
+    useProductStore.persist.hasHydrated()
+  );
+}
+
+function getServerSnapshot() {
+  return false;
 }
 
 export default function TrendingRecommendations() {
-  const [now, setNow] = useState<number | null>(null);
   const orders = useOrderStore((state) => state.orders);
 
-  useEffect(() => {
-    setNow(Date.now());
-
-    const timer = window.setInterval(() => {
-      setNow(Date.now());
-    }, 60_000);
-
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const {
-    data: products = [],
-    isPending,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ["recommendations", "catalog"],
-    queryFn: fetchProducts,
-    staleTime: 5 * 60 * 1000,
-    enabled: now !== null && orders.length > 0,
-  });
   const customProducts = useProductStore(
     (state) => state.customProducts
   );
+
   const overrides = useProductStore(
     (state) => state.overrides
   );
+
   const hiddenIds = useProductStore(
     (state) => state.hiddenIds
   );
 
-  const managedProducts = [
-    ...customProducts,
-    ...Object.values(overrides),
-  ].map((item) => ({
-    id: item.id,
-    name: item.title,
-    price: item.price,
-    thumbnail: item.thumbnail,
-    category: item.category,
-    rating: item.rating,
-  }));
-
-  const managedIds = new Set(
-    managedProducts.map((item) => item.id)
+  const ready = useSyncExternalStore(
+    subscribeToHydration,
+    getHydrationSnapshot,
+    getServerSnapshot
   );
 
-  const catalog = [
-    ...managedProducts,
-    ...products.filter((item) => !managedIds.has(item.id)),
-  ].filter((item) => !hiddenIds.includes(item.id));
-       
+  const {
+    data: apiProducts = [],
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["products", "trending"],
+    queryFn: fetchProducts,
+    staleTime: 5 * 60 * 1000,
+  });
 
-const recommendations =
-    now === null
-      ? []
-      : getTrendingRecommendations(
-          catalog,
-          orders,
-          6,
-          now
-        );
+  if (!ready || isPending) {
+    return (
+      <p role="status" className="mt-8">
+        Loading trending products...
+      </p>
+    );
+  }
+
+  if (isError) {
+    return (
+      <section
+        aria-labelledby="trending-title"
+        className="mt-8 rounded border p-5"
+      >
+        <h2
+          id="trending-title"
+          className="text-2xl font-bold"
+        >
+          Trending products
+        </h2>
+
+        <p role="alert" className="mt-3">
+          Unable to load trending products.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="mt-3 rounded border px-4 py-2"
+        >
+          Retry trending products
+        </button>
+      </section>
+    );
+  }
+
+  const catalog = new Map<number, Product>();
+
+  for (const product of apiProducts) {
+    catalog.set(
+      product.id,
+      overrides[product.id] ?? product
+    );
+  }
+
+  for (const product of customProducts) {
+    catalog.set(
+      product.id,
+      overrides[product.id] ?? product
+    );
+  }
+
+  const purchaseCounts = new Map<number, number>();
+
+  for (const order of orders) {
+    for (const item of order.items) {
+      purchaseCounts.set(
+        item.id,
+        (purchaseCounts.get(item.id) ?? 0) +
+          item.quantity
+      );
+    }
+  }
+
+  const trendingProducts = [...catalog.values()]
+    .filter((product) => !hiddenIds.includes(product.id))
+    .sort((a, b) => {
+      const purchaseDifference =
+        (purchaseCounts.get(b.id) ?? 0) -
+        (purchaseCounts.get(a.id) ?? 0);
+
+      return (
+        purchaseDifference ||
+        b.rating - a.rating ||
+        a.title.localeCompare(b.title)
+      );
+    })
+    .slice(0, 4);
 
   return (
     <section
       aria-labelledby="trending-title"
-      className="mt-10 border-t pt-6"
+      className="mt-8 rounded border p-5"
     >
       <h2
         id="trending-title"
-        className="mb-4 text-2xl font-bold"
+        className="text-2xl font-bold"
       >
-        Trending in demo orders
+        Trending products
       </h2>
 
-      <p className="mb-4 text-sm text-gray-600">
-        Ranked by quantities ordered during the last
-        30 days on this browser. This is demo activity,
-        not live market data.
+      <p className="mt-2 text-sm text-gray-600">
+        Ranked by purchases saved in this browser,
+        followed by product rating.
       </p>
 
-      {now === null ? (
-        <p role="status">Loading...</p>
-      ) : orders.length === 0 ? (
-        <p>No demo orders available yet.</p>
-      ) : isPending ? (
-        <p role="status">Loading trending products...</p>
-      ) : isError ? (
-        <div role="alert">
-          <p>Unable to load trending products.</p>
-
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="mt-3 rounded border px-4 py-2"
-          >
-            Try again
-          </button>
-        </div>
-      ) : recommendations.length === 0 ? (
-        <p role="status">
-          No matching products from demo orders in the
-          last 30 days.
+      {trendingProducts.length === 0 ? (
+        <p className="mt-4">
+          No trending products available.
         </p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {recommendations.map((product) => (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {trendingProducts.map((product) => (
             <article
               key={product.id}
               className="rounded border p-4"
             >
-              <Link href={"/products/" + product.id}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={product.thumbnail}
-                  alt={product.name}
-                  width={240}
-                  height={160}
-                  loading="lazy"
-                  className="mb-3 h-40 w-full object-contain"
-                />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={product.thumbnail}
+                alt={product.title}
+                width={240}
+                height={160}
+                loading="lazy"
+                className="h-40 w-full rounded object-contain"
+              />
 
-                <h3 className="font-semibold underline">
-                  {product.name}
-                </h3>
-              </Link>
+              <h3 className="mt-3 font-semibold">
+                <Link
+                  href={"/products/" + product.id}
+                  className="underline"
+                >
+                  {product.title}
+                </Link>
+              </h3>
 
-              <p className="mt-2 text-sm capitalize text-gray-600">
+              <p className="mt-2 capitalize">
                 {product.category.replaceAll("-", " ")}
               </p>
 

@@ -1,31 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import RequireAuth from "../components/RequireAuth";
+import AdminProducts from "../components/AdminProducts";
 import {
   ORDER_STATUSES,
   useOrderStore,
   type OrderStatus,
 } from "../stores/orderStore";
-import AdminProducts from "../components/AdminProducts";
+
+function subscribeToOrders(notify: () => void) {
+  const unsubscribeStart =
+    useOrderStore.persist.onHydrate(notify);
+
+  const unsubscribeFinish =
+    useOrderStore.persist.onFinishHydration(notify);
+
+  return () => {
+    unsubscribeStart();
+    unsubscribeFinish();
+  };
+}
+
+function getOrdersReady() {
+  return useOrderStore.persist.hasHydrated();
+}
+
+function getServerReady() {
+  return false;
+}
+
 function AdminContent() {
-  const [ready, setReady] = useState(false);
   const [message, setMessage] = useState("");
 
   const orders = useOrderStore((state) => state.orders);
+
   const updateOrderStatus = useOrderStore(
     (state) => state.updateOrderStatus
   );
 
-  useEffect(() => {
-    setReady(true);
-  }, []);
+  const ready = useSyncExternalStore(
+    subscribeToOrders,
+    getOrdersReady,
+    getServerReady
+  );
 
   function changeStatus(
     orderId: string,
     status: OrderStatus
   ) {
+    setMessage("");
+
     try {
       updateOrderStatus(orderId, status);
       setMessage("Order status updated to " + status + ".");
@@ -39,7 +65,11 @@ function AdminContent() {
   }
 
   if (!ready) {
-    return <p role="status">Loading dashboard...</p>;
+    return (
+      <p role="status" className="p-6">
+        Loading dashboard...
+      </p>
+    );
   }
 
   const totalSales = orders.reduce(
@@ -72,18 +102,27 @@ function AdminContent() {
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <section className="rounded border p-4">
           <h2 className="font-semibold">Orders</h2>
-          <p className="mt-2 text-2xl">{orders.length}</p>
+
+          <p className="mt-2 text-2xl">
+            {orders.length}
+          </p>
         </section>
 
         <section className="rounded border p-4">
           <h2 className="font-semibold">
             Customers with orders
           </h2>
-          <p className="mt-2 text-2xl">{customerCount}</p>
+
+          <p className="mt-2 text-2xl">
+            {customerCount}
+          </p>
         </section>
 
         <section className="rounded border p-4">
-          <h2 className="font-semibold">Demo sales total</h2>
+          <h2 className="font-semibold">
+            Demo sales total
+          </h2>
+
           <p className="mt-2 text-2xl">
             USD ${totalSales.toFixed(2)}
           </p>
@@ -126,7 +165,9 @@ function AdminContent() {
 
                 <p className="mt-2">
                   Placed:{" "}
-                  {new Date(order.createdAt).toLocaleString()}
+                  {new Date(
+                    order.createdAt
+                  ).toLocaleString()}
                 </p>
 
                 <p className="mt-2 font-semibold">
@@ -151,9 +192,11 @@ function AdminContent() {
                   {order.items.map((item, index) => (
                     <li key={index}>
                       {item.name} × {item.quantity}
+
                       {item.size
                         ? " — Size: " + item.size
                         : ""}
+
                       {item.colour
                         ? " — Colour: " + item.colour
                         : ""}
@@ -187,7 +230,8 @@ function AdminContent() {
           })}
         </div>
       )}
-      <AdminProducts/>
+
+      <AdminProducts />
     </main>
   );
 }
